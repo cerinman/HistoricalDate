@@ -1,0 +1,4 @@
+C:\Users\tdugger\Documents\Github\HistoricalDate\HistoricalDate\HistoricalDate\bin\Debug\HistoricalDate.dll
+C:\Users\tdugger\Documents\Github\HistoricalDate\HistoricalDate\HistoricalDate\bin\Debug\HistoricalDate.pdb
+C:\Users\tdugger\Documents\Github\HistoricalDate\HistoricalDate\HistoricalDate\obj\Debug\HistoricalDate.dll
+C:\Users\tdugger\Documents\Github\HistoricalDate\HistoricalDate\HistoricalDate\obj\Debug\HistoricalDate.pdb
