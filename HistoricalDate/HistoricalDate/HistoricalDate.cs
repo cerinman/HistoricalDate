@@ -1,43 +1,178 @@
-﻿//By: Tommy Dugger
+﻿//By: Tommy Dugger & Jared Chavez
 //Created: 1/18/2014
 //Purpose: To handle dates in the BCE era that are not
 //covered in .Nets DateTime class.
 
 using System;
 using System.Globalization;
-using System.Linq;
 
 namespace HistoricalDate
 {
+    /// <summary>
+    /// Enum of era types
+    /// </summary>
+    public enum Era : byte
+    {
+        BC,
+        AD
+    }
+
     public class HistoricalAge
     {
         public int Years { get; set; }
     }
 
-    public class HistoricalDate
+    public struct HistoricalDate
     {
-        public int Year { get; set; }
-
-        public int Month { get; set; }
-
-        public int Day { get; set; }
-
-        public Era Era { get; set; }
+        // -------------------------------------------------------------------------------
+        //
+        // Const
+        //
+        // -------------------------------------------------------------------------------
+        private const float DaysPerYear = 365.2425f;
+        private const int DefaultDay = 1;
+        private const int DefaultMonth = 1;
+        private const int DefaultYear = 1;
+        private const int LeapYear = 2004;
+        private const int NonLeapYear = 2005;
 
         /// <summary>
-        /// Returns an HistoricalDate with the day, month, year,
-        /// and era set to current date
+        /// Max valid value for a HistoricalDate
         /// </summary>
-        /// <returns>HistoricalDate</returns>
-        public static HistoricalDate Now()
+        public static readonly HistoricalDate MaxValue = new HistoricalDate
         {
-            return new HistoricalDate
+            Day = 31,
+            Month = 12,
+            Year = 99999,
+            Era = Era.AD
+        };
+
+        /// <summary>
+        /// Min valid value for a HistoricalDate
+        /// </summary>
+        public static readonly HistoricalDate MinValue = new HistoricalDate
+        {
+            Day = 1,
+            Month = 1,
+            Year = 99999,
+            Era = Era.BC
+        };
+
+        /// <summary>
+        /// Valid date separators
+        /// </summary>
+        private static readonly string[] DateSeparators = { ",", ".", "-", "/", "\\", " " };        
+
+        /// <summary>
+        /// Static mapping of months
+        /// </summary>
+        private static readonly string[] Months = {
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December"
+        };
+
+        // -------------------------------------------------------------------------------
+        //
+        // Fields
+        //
+        // -------------------------------------------------------------------------------
+        public int Year;
+        public int Month;
+        public int Day;
+        public Era Era;
+
+        public static HistoricalDate Now
+        {
+            get
             {
-                Day = DateTime.Now.Day,
-                Month = DateTime.Now.Month,
-                Year = DateTime.Now.Year,
-                Era = Era.AD
-            };
+                return new HistoricalDate
+                {
+                    Day = DateTime.Now.Day,
+                    Month = DateTime.Now.Month,
+                    Year = DateTime.Now.Year,
+                    Era = Era.AD
+                };
+            }
+        }
+
+
+        // -------------------------------------------------------------------------------
+        //
+        // Overrides
+        //
+        // -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// ToString override
+        /// </summary>
+        /// <returns>A string representation of the HistoricalDate object.</returns>
+        public override string ToString()
+        {
+            var day = string.Empty;
+            var month = string.Empty;
+            var year = Year.ToString(CultureInfo.InvariantCulture);
+            var era = Era.ToString();
+
+            var returnString = string.Empty;
+
+            if (this.Month <= Months.Length)
+                month = Months[this.Month - 1];
+
+            if (this.Day > 0)
+                day = this.Day.ToString(CultureInfo.InvariantCulture);
+
+            if (!string.IsNullOrEmpty(day) && !string.IsNullOrEmpty(month))
+                returnString = string.Format("{0} {1}, {2} {3}", month, day, year, era);
+
+
+            if (string.IsNullOrEmpty(day) && !string.IsNullOrEmpty(month))
+                returnString = string.Format("{0} {1} {2}", month, year, era);
+
+
+            if (string.IsNullOrEmpty(day) && string.IsNullOrEmpty(month))
+                returnString = string.Format("{0} {1}", year, era);
+
+            return returnString;
+        }
+
+
+        // -------------------------------------------------------------------------------
+        //
+        // Public methods
+        //
+        // -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Determines if the specified year is a leap year.
+        /// </summary>
+        /// <returns></returns>
+        /// <param name="year">Year to test.</param>
+        public static bool IsLeapYear(int year)
+        {
+            // not divisible by 4? not a leap year
+            if (year % 4 != 0)
+                return false;
+
+            // divisible by 4 and not divisible by 100? always a leap year
+            if (year % 100 != 0)
+                return true;
+
+            // divisible by 4 and 100? Only a leap year if also divisible by 400
+            if (year % 400 == 0)
+                return true;
+
+            // not a leap year, then
+            return false;
         }
 
         /// <summary>
@@ -47,279 +182,45 @@ namespace HistoricalDate
         /// </summary>
         /// <param name="date">string</param>
         /// <returns>HistoricalDate</returns>
-        public HistoricalDate ParseString(string date)
+        public static HistoricalDate Parse(string date)
         {
-            const int january = 31;
-            const int february = 28;
-            const int march = 31;
-            const int april = 30;
-            const int may = 31;
-            const int june = 30;
-            const int july = 31;
-            const int august = 31;
-            const int september = 30;
-            const int october = 31;
-            const int november = 30;
-            const int december = 31;
+            // string -> object
+            var newObj = ParseInternal(date);
 
-            string[] separators = { ",", ".", "-", "/", "\\", " " };
+            // validate the object
+            string errData;
+            if (!TryValidate(newObj, out errData))
+                throw new Exception(errData);
 
-            var seperatedString = date.Split(separators, StringSplitOptions.RemoveEmptyEntries);
-
-            var day = 0;
-            var month = 0;
-            var year = 0;
-            var era = Era.AD;
-
-            if (seperatedString.Count() <= 1 || seperatedString.Count() >= 5)
-            {
-                return Now();
-            }
-
-            if (seperatedString.Count() == 2)
-            {
-                day = 0;
-                month = 0;
-                year = int.Parse(seperatedString.ElementAt(0));
-
-                if (seperatedString.ElementAt(1).ToLower() == "ad")
-                {
-                    era = Era.AD;
-                }
-
-                if (seperatedString.ElementAt(1).ToLower() == "bc")
-                {
-                    era = Era.BC;
-                }
-
-            }
-
-            if (seperatedString.Count() == 3)
-            {
-                day = 0;
-                month = int.Parse(seperatedString.ElementAt(0));
-                year = int.Parse(seperatedString.ElementAt(1));
-
-                if (seperatedString.ElementAt(2).ToLower() == "ad")
-                {
-                    era = Era.AD;
-                }
-
-                if (seperatedString.ElementAt(2).ToLower() == "bc")
-                {
-                    era = Era.BC;
-                }
-
-                if (month > 12)
-                {
-                    throw new Exception("Month is out of range!  Month can not be greater than 12.");
-                }
-            }
-
-            if (seperatedString.Count() == 4)
-            {
-                day = int.Parse(seperatedString.ElementAt(0));
-                month = int.Parse(seperatedString.ElementAt(1));
-                year = int.Parse(seperatedString.ElementAt(2));
-
-                if (seperatedString.ElementAt(3).ToLower() == "ad")
-                {
-                    era = Era.AD;
-                }
-
-                if (seperatedString.ElementAt(3).ToLower() == "bc")
-                {
-                    era = Era.BC;
-                }
-
-                if (month > 12)
-                {
-                    throw new Exception("Month is out of range!  Month can not be greater than 12.");
-                }
-
-                if (month == 1)
-                {
-                    if (day > january)
-                    {
-                        throw new Exception(string.Format("January has only {0} days.", january));
-                    }
-                }
-
-                if (month == 2)
-                {
-                    if (day > february)
-                    {
-                        throw new Exception(string.Format("February has only {0} days.", february));
-                    }
-                }
-
-                if (month == 3)
-                {
-                    if (day > march)
-                    {
-                        throw new Exception(string.Format("March has only {0} days.", march));
-                    }
-                }
-
-                if (month == 4)
-                {
-                    if (day > april)
-                    {
-                        throw new Exception(string.Format("April has only {0} days.", april));
-                    }
-                }
-
-                if (month == 5)
-                {
-                    if (day > may)
-                    {
-                        throw new Exception(string.Format("May has only {0} days.", may));
-                    }
-                }
-
-                if (month == 6)
-                {
-                    if (day > june)
-                    {
-                        throw new Exception(string.Format("June has only {0} days.", june));
-                    }
-                }
-
-                if (month == 7)
-                {
-                    if (day > july)
-                    {
-                        throw new Exception(string.Format("July has only {0} days.", july));
-                    }
-                }
-
-                if (month == 8)
-                {
-                    if (day > august)
-                    {
-                        throw new Exception(string.Format("August has only {0} days.", august));
-                    }
-                }
-
-                if (month == 9)
-                {
-                    if (day > september)
-                    {
-                        throw new Exception(string.Format("September has only {0} days.", september));
-                    }
-                }
-
-                if (month == 10)
-                {
-                    if (day > october)
-                    {
-                        throw new Exception(string.Format("October has only {0} days.", october));
-                    }
-                }
-
-                if (month == 11)
-                {
-                    if (day > november)
-                    {
-                        throw new Exception(string.Format("November has only {0} days.", november));
-                    }
-                }
-
-                if (month == 12)
-                {
-                    if (day > december)
-                    {
-                        throw new Exception(string.Format("December has only {0} days.", december));
-                    }
-                }
-            }
-
-            var parsedDate = new HistoricalDate
-            {
-                Day = day,
-                Month = month,
-                Year = year,
-                Era = era
-            };
-
-            return parsedDate;
+            // return the object
+            return newObj;
         }
 
         /// <summary>
-        /// Convert Historical Date to string.  Example: "January 1, 2014 AD"
+        /// Attempts to parse the given date text into a usable HistoricalDate object. If
+        /// the date string is parsed successfully, newDate contains the new HistoricalDate object.
+        /// If the date string cannot be parsed successfully, newDate contains 
+        /// HistoricalDate.MIN_VALUE.
         /// </summary>
-        /// <param name="date">HistoricalDate</param>
-        /// <returns>Date as string</returns>
-        public static string DateToString(HistoricalDate date)
+        /// <returns><c>true</c>, if parsed successfully, <c>false</c> otherwise.</returns>
+        /// <param name="date">Date in strong format.</param>
+        /// <param name="newDate">Parsed HistoricalDate object.</param>
+        public static bool TryParse(string date, out HistoricalDate newDate)
         {
-            var day = string.Empty;
-            var month = string.Empty;
-            var year = date.Year.ToString(CultureInfo.InvariantCulture);
-            var era = date.Era.ToString();
+            // string -> object
+            newDate = ParseInternal(date);
 
-            var returnString = string.Empty;
-
-            switch (date.Month)
+            // validate the object
+            string errData;
+            if (!TryValidate(newDate, out errData))
             {
-                case 1:
-                    month = "January";
-                    break;
-                case 2:
-                    month = "February";
-                    break;
-                case 3:
-                    month = "March";
-                    break;
-                case 4:
-                    month = "April";
-                    break;
-                case 5:
-                    month = "May";
-                    break;
-                case 6:
-                    month = "June";
-                    break;
-                case 7:
-                    month = "July";
-                    break;
-                case 8:
-                    month = "August";
-                    break;
-                case 9:
-                    month = "September";
-                    break;
-                case 10:
-                    month = "October";
-                    break;
-                case 11:
-                    month = "November";
-                    break;
-                case 12:
-                    month = "December";
-                    break;
+                // return false and set default value
+                newDate = MinValue;
+                return false;
             }
 
-            if (date.Day > 0)
-            {
-                day = date.Day.ToString(CultureInfo.InvariantCulture);
-            }
-
-            if (!string.IsNullOrEmpty(day) && !string.IsNullOrEmpty(month))
-            {
-                returnString = string.Format("{0} {1}, {2} {3}", month, day, year, era);
-            }
-
-            if (string.IsNullOrEmpty(day) && !string.IsNullOrEmpty(month))
-            {
-                returnString = string.Format("{0} {1} {2}", month, year, era);
-            }
-
-            if (string.IsNullOrEmpty(day) && string.IsNullOrEmpty(month))
-            {
-                returnString = string.Format("{0} {1}", year, era);
-            }
-
-            return returnString;
+            // return true and the parsed object
+            return true;
         }
 
         /// <summary>
@@ -330,302 +231,164 @@ namespace HistoricalDate
         /// <returns>HistoricalAge</returns>
         public static HistoricalAge YearsBetweenHistoricalDates(HistoricalDate date1, HistoricalDate date2)
         {
-            const int oneMonth = 31;
-            const int twoMonth = 59;
-            const int threeMonth = 90;
-            const int fourMonth = 120;
-            const int fiveMonth = 151;
-            const int sixMonth = 181;
-            const int sevenMonth = 212;
-            const int eightMonth = 243;
-            const int nineMonth = 273;
-            const int tenMonth = 304;
-            const int elevenMonth = 334;
-            const int twelveMonth = 365;
+            // negate the year if we're BC
+            var startYear = (date1.Era == Era.BC) ? -date1.Year : date1.Year;
+            var endYear = (date2.Era == Era.BC) ? -date2.Year : date2.Year;
 
-            var age = new HistoricalAge();
+            // Figure out the difference in raw years
+            var baseDiff = endYear - startYear;
 
-            if (date1.Era == date2.Era)
+            // Figure out the difference in the remaining months and days
+            int startDays = -date1.Day;
+            for (int i = 1; i <= date1.Month; ++i)
+                startDays += GetDaysInMonth(i, date1.Year);
+
+
+            int endDays = -date2.Day;
+            for (int i = 12; i >= date2.Month; --i)
+                endDays += GetDaysInMonth(i, date2.Year);
+
+            // Increment year if it adds up
+            if (startDays + endDays > DaysPerYear)
+                baseDiff++;
+
+            // return results
+            return new HistoricalAge
             {
-                var years = date1.Year - date2.Year;
-
-                var numberOfDays = years * 365.2425;
-
-                //Date1 Months/Days
-                if (date1.Month == 1)
-                {
-                    numberOfDays = (numberOfDays + oneMonth) - date1.Day;
-                }
-
-                if (date1.Month == 2)
-                {
-                    numberOfDays = (numberOfDays + twoMonth) - date1.Day;
-                }
-
-                if (date1.Month == 3)
-                {
-                    numberOfDays = (numberOfDays + threeMonth) - date1.Day;
-                }
-
-                if (date1.Month == 4)
-                {
-                    numberOfDays = (numberOfDays + fourMonth) - date1.Day;
-                }
-
-                if (date1.Month == 5)
-                {
-                    numberOfDays = (numberOfDays + fiveMonth) - date1.Day;
-                }
-
-                if (date1.Month == 6)
-                {
-                    numberOfDays = (numberOfDays + sixMonth) - date1.Day;
-                }
-
-                if (date1.Month == 7)
-                {
-                    numberOfDays = (numberOfDays + sevenMonth) - date1.Day;
-                }
-
-                if (date1.Month == 8)
-                {
-                    numberOfDays = (numberOfDays + eightMonth) - date1.Day;
-                }
-
-                if (date1.Month == 9)
-                {
-                    numberOfDays = (numberOfDays + nineMonth) - date1.Day;
-                }
-
-                if (date1.Month == 10)
-                {
-                    numberOfDays = (numberOfDays + tenMonth) - date1.Day;
-                }
-
-                if (date1.Month == 11)
-                {
-                    numberOfDays = (numberOfDays + elevenMonth) - date1.Day;
-                }
-
-                if (date1.Month == 12)
-                {
-                    numberOfDays = (numberOfDays + twelveMonth) - date1.Day;
-                }
-
-                //Date2 Months/Days
-                if (date2.Month == 1)
-                {
-                    numberOfDays = (numberOfDays + oneMonth) - date2.Day;
-                }
-
-                if (date2.Month == 2)
-                {
-                    numberOfDays = (numberOfDays + twoMonth) - date2.Day;
-                }
-
-                if (date2.Month == 3)
-                {
-                    numberOfDays = (numberOfDays + threeMonth) - date2.Day;
-                }
-
-                if (date2.Month == 4)
-                {
-                    numberOfDays = (numberOfDays + fourMonth) - date2.Day;
-                }
-
-                if (date2.Month == 5)
-                {
-                    numberOfDays = (numberOfDays + fiveMonth) - date2.Day;
-                }
-
-                if (date2.Month == 6)
-                {
-                    numberOfDays = (numberOfDays + sixMonth) - date2.Day;
-                }
-
-                if (date2.Month == 7)
-                {
-                    numberOfDays = (numberOfDays + sevenMonth) - date2.Day;
-                }
-
-                if (date2.Month == 8)
-                {
-                    numberOfDays = (numberOfDays + eightMonth) - date2.Day;
-                }
-
-                if (date2.Month == 9)
-                {
-                    numberOfDays = (numberOfDays + nineMonth) - date2.Day;
-                }
-
-                if (date2.Month == 10)
-                {
-                    numberOfDays = (numberOfDays + tenMonth) - date2.Day;
-                }
-
-                if (date2.Month == 11)
-                {
-                    numberOfDays = (numberOfDays + elevenMonth) - date2.Day;
-                }
-
-                if (date2.Month == 12)
-                {
-                    numberOfDays = (numberOfDays + twelveMonth) - date2.Day;
-                }
-
-                var totalYears = numberOfDays / 365.2425;
-
-                totalYears = Math.Floor(totalYears);
-
-                age.Years = (int)totalYears;
-            }
-            else
-            {
-                var date1NumberOfDays = date1.Year * 365.2425;
-
-                //Date1 Months/Days
-                if (date1.Month == 1)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + oneMonth) - date1.Day;
-                }
-
-                if (date1.Month == 2)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + twoMonth) - date1.Day;
-                }
-
-                if (date1.Month == 3)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + threeMonth) - date1.Day;
-                }
-
-                if (date1.Month == 4)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + fourMonth) - date1.Day;
-                }
-
-                if (date1.Month == 5)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + fiveMonth) - date1.Day;
-                }
-
-                if (date1.Month == 6)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + sixMonth) - date1.Day;
-                }
-
-                if (date1.Month == 7)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + sevenMonth) - date1.Day;
-                }
-
-                if (date1.Month == 8)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + eightMonth) - date1.Day;
-                }
-
-                if (date1.Month == 9)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + nineMonth) - date1.Day;
-                }
-
-                if (date1.Month == 10)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + tenMonth) - date1.Day;
-                }
-
-                if (date1.Month == 11)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + elevenMonth) - date1.Day;
-                }
-
-                if (date1.Month == 12)
-                {
-                    date1NumberOfDays = (date1NumberOfDays + twelveMonth) - date1.Day;
-                }
-
-                var date2NumberOfDays = date2.Year * 365.2425;
-
-                //Date2 Months/Days
-                if (date2.Month == 1)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + oneMonth) - date2.Day;
-                }
-
-                if (date2.Month == 2)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + twoMonth) - date2.Day;
-                }
-
-                if (date2.Month == 3)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + threeMonth) - date2.Day;
-                }
-
-                if (date2.Month == 4)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + fourMonth) - date2.Day;
-                }
-
-                if (date2.Month == 5)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + fiveMonth) - date2.Day;
-                }
-
-                if (date2.Month == 6)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + sixMonth) - date2.Day;
-                }
-
-                if (date2.Month == 7)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + sevenMonth) - date2.Day;
-                }
-
-                if (date2.Month == 8)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + eightMonth) - date2.Day;
-                }
-
-                if (date2.Month == 9)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + nineMonth) - date2.Day;
-                }
-
-                if (date2.Month == 10)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + tenMonth) - date2.Day;
-                }
-
-                if (date2.Month == 11)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + elevenMonth) - date2.Day;
-                }
-
-                if (date2.Month == 12)
-                {
-                    date2NumberOfDays = (date2NumberOfDays + twelveMonth) - date2.Day;
-                }
-
-                var totalDaysBetweenDates = date1NumberOfDays + date2NumberOfDays;
-
-                var totalYears = totalDaysBetweenDates / 365.2425;
-
-                totalYears = Math.Floor(totalYears);
-
-                age.Years = (int)totalYears;
-            }
-
-            return age;
+                Years = baseDiff
+            };
         }
-    }
 
-    /// <summary>
-    /// Enum of era types
-    /// </summary>
-    public enum Era
-    {
-        BC,
-        AD
+
+        // -------------------------------------------------------------------------------
+        //
+        // Private methods
+        //
+        // -------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Gets the days in a particular month, accounting for leap years and eras.
+        /// </summary>
+        /// <returns>The days in month.</returns>
+        /// <param name="month">Month.</param>
+        /// <param name="year">Year.</param>
+        private static int GetDaysInMonth(int month, int year)
+        {
+            return DateTime.DaysInMonth(
+                IsLeapYear(year) ? LeapYear : NonLeapYear,
+                month
+            );
+        }
+
+        /// <summary>
+        /// Internal parsing of string to a HistoricalDate struct. Validation is
+        /// left to the various public implementations.
+        /// </summary>
+        /// <returns>An un-validated HistoricalDate.</returns>
+        /// <param name="date">Date in string format.</param>
+        private static HistoricalDate ParseInternal(string date)
+        {
+            var seperatedString = date.Split(
+                DateSeparators,
+                StringSplitOptions.RemoveEmptyEntries
+            );
+
+            var result = new HistoricalDate
+            {
+                Day = DefaultDay,
+                Month = DefaultMonth,
+                Year = DefaultYear
+            };
+
+            // once
+            for (; ; )
+            {
+                if (seperatedString.Length < 2)
+                {
+                    return Now;
+                }
+
+                if (seperatedString.Length == 2)
+                {
+                    result.Year = SafeParse(seperatedString[0], DefaultYear);
+                    Enum.TryParse(seperatedString[1], true, out result.Era);
+                    break;
+                }
+
+                if (seperatedString.Length == 3)
+                {
+                    result.Month = SafeParse(seperatedString[0], DefaultMonth);
+                    result.Year = SafeParse(seperatedString[1], DefaultYear);
+                    Enum.TryParse(seperatedString[2], true, out result.Era);
+                    break;
+                }
+
+                if (seperatedString.Length > 3)
+                {
+                    result.Day = SafeParse(seperatedString[0], DefaultDay);
+                    result.Month = SafeParse(seperatedString[1], DefaultMonth);
+                    result.Year = SafeParse(seperatedString[2], DefaultYear);
+                    Enum.TryParse(seperatedString[3], true, out result.Era);
+                    break;
+                }
+
+                throw new Exception("Infinite for(;;) loop. Should never get here!");
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Helper function to safely parse data into ints while providing
+        /// fallback default values.
+        /// </summary>
+        /// <returns>The parsed int, or the provided default if the parse was
+        /// unsuccessful.</returns>
+        /// <param name="data">Data in string format.</param>
+        /// <param name="defaultVal">Default value to use if parsing fails.</param>
+        private static int SafeParse(string data, int defaultVal)
+        {
+            int tempVal;
+
+            if (int.TryParse(data, out tempVal))
+                return tempVal;
+
+            return defaultVal;
+        }
+
+        /// <summary>
+        /// Tries to validate the values in a HistoricalDate object and returns true if all
+        /// values are valid. Returns false and sets the errData output with the relevant
+        /// error text if not.
+        /// </summary>
+        /// <returns><c>true</c>, if validated, otherwise <c>false</c></returns>
+        /// <param name="date">Test Date.</param>
+        /// <param name="errData">Error data, if invalid Date.</param>
+        private static bool TryValidate(HistoricalDate date, out string errData)
+        {
+            if (date.Month < 1 || date.Month > 12)
+            {
+                errData = string.Format(
+                    "Month is out of range! {0} < 1 || > 12",
+                    date.Month
+                );
+
+                return false;
+            }
+
+            if (date.Day < 1 || date.Day > GetDaysInMonth(date.Month, date.Year))
+            {
+                errData = string.Format(
+                    "Day is out of range! Month {0} can not be greater than {1}",
+                    date.Month,
+                    GetDaysInMonth(date.Month, date.Year)
+                );
+
+                return false;
+            }
+
+            errData = string.Empty;
+            return true;
+        }
     }
 }
